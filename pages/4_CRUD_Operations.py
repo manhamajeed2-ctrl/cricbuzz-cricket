@@ -10,11 +10,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from utils.db_connection import execute_query, execute_write
+from utils.db_connection import execute_query, execute_write, ensure_seeded, get_db_path
 
 st.set_page_config(page_title="CRUD | Cricbuzz LiveStats", page_icon="🛠️", layout="wide")
 st.title("🛠️ CRUD Operations")
 st.caption("Create, Read, Update, Delete player records.")
+
+if not ensure_seeded():
+    st.error(
+        f"Database empty or missing at `{get_db_path()}`.\n\n"
+        "Run `python init_db.py` locally, or ensure `data/cricket.db` is committed for Streamlit Cloud."
+    )
+    st.stop()
 
 tab_read, tab_create, tab_update, tab_delete = st.tabs(
     ["📖 Read / List", "➕ Create", "✏️ Update", "🗑️ Delete"]

@@ -127,13 +127,25 @@ You can also write custom `SELECT` queries on the same page.
 - Works offline (mock + SQLite)
 - CRUD via form-based UI
 
+## Streamlit Cloud deployment
+
+1. Push the whole repo **including** `data/cricket.db`.
+2. In Streamlit Cloud → App settings → Secrets (optional):
+   ```toml
+   RAPIDAPI_KEY = "your_rapidapi_key"
+   ```
+3. Main file: `app.py`
+4. The app copies the DB to a writable `/tmp` path when the repo FS is read-only.
+
+If you see `sqlite3.OperationalError`, the DB is usually missing from the deployed repo — commit `data/cricket.db` and reboot the app.
+
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
 | `No module named 'utils'` | Run from project root: `streamlit run app.py` |
-| Empty tables | Run `python init_db.py` again |
-| API returns nothing | Check `RAPIDAPI_KEY` in `.env` or use mock mode |
+| Empty tables / OperationalError | Run `python init_db.py`; on Cloud ensure `data/cricket.db` is in git |
+| API returns nothing | Check `RAPIDAPI_KEY` in `.env` or Streamlit Secrets |
 | Port already in use | `streamlit run app.py --server.port 8502` |
 
 ## License

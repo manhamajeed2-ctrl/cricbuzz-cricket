@@ -10,12 +10,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from utils.db_connection import execute_query
+from utils.db_connection import execute_query, ensure_seeded, get_db_path
 from utils.sql_queries import QUERIES
 
 st.set_page_config(page_title="SQL Analytics | Cricbuzz LiveStats", page_icon="🔍", layout="wide")
 st.title("🔍 SQL Queries & Analytics")
 st.caption("25 practice questions across Beginner, Intermediate and Advanced levels.")
+
+if not ensure_seeded():
+    st.error(
+        f"Database empty or missing at `{get_db_path()}`.\n\n"
+        "Run `python init_db.py` locally, or ensure `data/cricket.db` is committed for Streamlit Cloud."
+    )
+    st.stop()
 
 levels = ["All", "Beginner", "Intermediate", "Advanced"]
 selected_level = st.selectbox("Filter by level", levels)

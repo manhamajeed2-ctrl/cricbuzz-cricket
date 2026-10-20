@@ -11,18 +11,37 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from utils.db_connection import execute_query
+from utils.db_connection import execute_query, ensure_seeded, get_db_path
 from utils.api_client import get_trending_players
 
 st.set_page_config(page_title="Player Stats | Cricbuzz LiveStats", page_icon="📊", layout="wide")
 st.title("📊 Top Player Stats")
 
+# Friendly diagnostics if DB is empty / missing
+if not ensure_seeded():
+    st.error(
+        "Database is empty or could not be loaded.\n\n"
+        f"Expected path: `{get_db_path()}`\n\n"
+        "**Fix:**\n"
+        "1. Locally run `python init_db.py` then restart Streamlit.\n"
+        "2. On Streamlit Cloud: make sure `data/cricket.db` is committed to the repo "
+        "(and is under 100 MB)."
+    )
+    st.stop()
+
 tab_bat, tab_bowl, tab_trend = st.tabs(["🏏 Batting Leaders", "🎯 Bowling Leaders", "🔥 Trending (API)"])
+
+ALLOWED_BAT_METRICS = {"runs", "average", "strike_rate", "centuries"}
+ALLOWED_BOWL_METRICS = {"wickets", "bowling_average", "economy_rate"}
 
 with tab_bat:
     fmt = st.selectbox("Format", ["ODI", "Test", "T20I"], key="bat_fmt")
     metric = st.selectbox("Rank by", ["runs", "average", "strike_rate", "centuries"], key="bat_metric")
     limit = st.slider("Show top N", 5, 30, 10, key="bat_n")
+
+    if metric not in ALLOWED_BAT_METRICS:
+        st.error("Invalid metric")
+        st.stop()
 
     q = f"""
     SELECT p.full_name AS Player, p.country AS Country,
@@ -34,21 +53,34 @@ with tab_bat:
     ORDER BY bs.{metric} DESC
     LIMIT ?
     """
-    rows = execute_query(q, (fmt, limit))
+    try:
+        rows = execute_query(q, (fmt, limit))
+    except Exception as e:
+        st.error(f"Could not load batting stats: {e}")
+        rows = []
+
     if rows:
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True, hide_index=True)
-        fig = px.bar(df, x="Player", y=metric.title() if metric != "strike_rate" else "SR",
-                     color="Country", title=f"Top {limit} by {metric} ({fmt})")
+        y_col = "SR" if metric == "strike_rate" else metric.title()
+        # Map column names used in SELECT
+        col_map = {"runs": "Runs", "average": "Average", "strike_rate": "SR", "centuries": "Hundreds"}
+        y_col = col_map.get(metric, "Runs")
+        fig = px.bar(df, x="Player", y=y_col, color="Country",
+                     title=f"Top {limit} by {metric} ({fmt})")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No batting data found. Run `python init_db.py` first.")
+        st.info("No batting data found for this format.")
 
 with tab_bowl:
     fmt = st.selectbox("Format", ["ODI", "Test", "T20I"], key="bowl_fmt")
     metric = st.selectbox("Rank by", ["wickets", "bowling_average", "economy_rate"], key="bowl_metric")
     limit = st.slider("Show top N", 5, 30, 10, key="bowl_n")
     order = "ASC" if metric in ("bowling_average", "economy_rate") else "DESC"
+
+    if metric not in ALLOWED_BOWL_METRICS:
+        st.error("Invalid metric")
+        st.stop()
 
     q = f"""
     SELECT p.full_name AS Player, p.country AS Country,
@@ -60,7 +92,12 @@ with tab_bowl:
     ORDER BY bw.{metric} {order}
     LIMIT ?
     """
-    rows = execute_query(q, (fmt, limit))
+    try:
+        rows = execute_query(q, (fmt, limit))
+    except Exception as e:
+        st.error(f"Could not load bowling stats: {e}")
+        rows = []
+
     if rows:
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True, hide_index=True)
@@ -69,13 +106,17 @@ with tab_bowl:
                      title=f"Top {limit} by {metric} ({fmt})")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No bowling data found.")
+        st.info("No bowling data found for this format.")
 
 with tab_trend:
-    st.caption("Trending players from Cricbuzz API (requires RAPIDAPI_KEY).")
+    st.caption("Trending players from Cricbuzz API (requires RAPIDAPI_KEY in secrets / .env).")
     if st.button("Refresh Trending"):
         st.rerun()
-    players = get_trending_players()
+    try:
+        players = get_trending_players()
+    except Exception as e:
+        st.warning(f"API error: {e}")
+        players = []
     if players:
         df = pd.DataFrame(players)
         st.dataframe(df, use_container_width=True, hide_index=True)
